@@ -1,0 +1,12 @@
+Running MC simulation on 6 rank(s)...
+
+Total number of steps: 1200.0M
+Number of equilibration steps per rank: 50.0M
+Box vectors: [36.405, 36.405, 36.405] Å
+Density: 1374.0 kg/m3
+Temperature: 95.0 K
+Starting at: 2022-04-14T04:39:21.486
+Mean acceptance ratio = 0.416
+Stopping at: 2022-04-14T05:51:10.419
+
+Walltime: 1 hour, 11 minutes, 48 seconds, 933 milliseconds
