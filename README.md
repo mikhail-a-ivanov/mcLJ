@@ -3,7 +3,7 @@
 
 This is my first program in Julia!
 
-Even running on 1 CPU core, this program runs almost **10x** faster compared to my previous Python implementation (with `numpy` and `numba` optimizations). 
+Even with 1 CPU core, this program runs almost **10x** faster compared to my previous Python implementation (with `numpy` and `numba` optimizations). 
 
 Moreover, the program runs in parallel by launching separate Monte Carlo simulations on every available processor and combining the results in the end, enabling almost linear scaling.
 
