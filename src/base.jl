@@ -12,7 +12,7 @@ separated by scaled Rm distance,
 and the periodic box vectors in reduced units
 """
 function ljlattice(parameters)
-    lattice = [convert(SVector{3, Float64}, [i, j, k]) 
+    lattice = [convert(SVector{3, Float32}, [i, j, k]) 
         for i in 0:parameters.latticePoints-1 
             for j in 0:parameters.latticePoints-1 
                 for k in 0:parameters.latticePoints-1]
@@ -85,9 +85,9 @@ function mcmove!(conf, parameters, distanceMatrix, E, rng)
     E1 = particleenergy(distanceVector)
 
     # Displace the particle
-    dr = SVector{3, Float64}(parameters.delta*(rand(rng, Float64) - 0.5), 
-                             parameters.delta*(rand(rng, Float64) - 0.5), 
-                             parameters.delta*(rand(rng, Float64) - 0.5))
+    dr = SVector{3, Float32}(parameters.delta*(rand(rng, Float32) - 0.5), 
+                             parameters.delta*(rand(rng, Float32) - 0.5), 
+                             parameters.delta*(rand(rng, Float32) - 0.5))
     
     conf[pointIndex] += dr
 
@@ -154,13 +154,15 @@ function mcrun(parameters)
         writexyz(conf, 0, parameters, false, trajFile)
     end
 
-    # Acceptance counter
+    # Acceptance counters
     acceptedTotal = 0
+    acceptedIntermediate = 0
 
     # Run MC simulation
     @inbounds @fastmath for i in 1:parameters.steps
         conf, E, accepted, distanceMatrix = mcmove!(conf, parameters, distanceMatrix, E, rng_xor)
         acceptedTotal += accepted
+        acceptedIntermediate += accepted
 
             # MC output
             if i % parameters.outfreq == 0 && i > parameters.Eqsteps && parameters.outlevel >= 1
@@ -174,6 +176,11 @@ function mcrun(parameters)
             if i % parameters.xyzout == 0 && parameters.outlevel == 3
                 writexyz(conf, i, parameters, true, trajFile)
             end
+            # Perform MC step adjustment during the equilibration
+            if parameters.stepAdjustFreq > 0 && i % parameters.stepAdjustFreq == 0 && i < parameters.Eqsteps
+                stepAdjustment!(parameters, acceptedIntermediate)
+                acceptedIntermediate = 0
+            end
     end
 
     if parameters.outlevel >= 1
@@ -185,6 +192,19 @@ function mcrun(parameters)
     acceptanceRatio = acceptedTotal / parameters.steps
     
     return(hist, acceptanceRatio)
+end
+
+"""
+function stepAdjustment!(parameters, acceptedIntermediate)
+
+MC step length adjustment
+"""
+function stepAdjustment!(parameters, acceptedIntermediate)
+    acceptanceRatio = acceptedIntermediate / parameters.stepAdjustFreq
+    #println("Current acceptance ratio = $(round(acceptanceRatio, digits=4))")
+    parameters.delta = acceptanceRatio * parameters.delta / parameters.targetAR
+    #println("New maximum displacement length = $(round((parameters.delta * parameters.sigma), digits=4)) Å")
+    return(parameters)
 end
 
 """
@@ -258,7 +278,7 @@ function writeRDF(outname, hist, parameters)
 end
 
 """
-struct inputParms
+mutable struct inputParms
 
 Fields:
 latticePoints: number of LJ lattice points
@@ -275,6 +295,8 @@ box: box vector, σ
 delta: max displacement [σ]
 steps: total number of steps
 Eqsteps: equilibration steps
+stepAdjustFreq: frequency of MC step adjustment
+targetAR: target acceptance ratio
 binWidth: histogram bin width [σ]
 Nbins: number of histogram bins
 xyzout: XYZ output frequency
@@ -282,22 +304,24 @@ outfreq: output frequency
 outlevel: output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)
 
 """
-struct inputParms
+mutable struct inputParms
     latticePoints::Int
     N::Int
     atommass::Float64
-    sigma::Float64
+    sigma::Float32
     epsilon::Float64
     T::Float64
     β::Float64
     density::Float64
     densityRm::Float64
     latticeScaling::Float64
-    box::SVector{3, Float64}
-    delta::Float64  
+    box::SVector{3, Float32}
+    delta::Float32  
     steps::Int
     Eqsteps::Int
-    binWidth::Float64
+    stepAdjustFreq::Int
+    targetAR::Float64
+    binWidth::Float32
     Nbins::Int
     xyzout::Int 
     outfreq::Int
@@ -318,7 +342,7 @@ function readinput(inputname)
 
     # Input values for later conversion
     latticePoints::Int = 0
-    σ::Float64 = 0. # [Å]
+    σ::Float32 = 0. # [Å]
     ϵ::Float64 = 0. # [K]
     atommass::Float64 = 0. # [amu]
     
@@ -360,8 +384,8 @@ function readinput(inputname)
                     densityRm = (amu*atommass / (2^(1/6) * σ * 1E-10)^3)
                     latticeScaling = (densityRm / density)^(1/3)
                     # Generate PBC box vectors
-                    boxSide::Float64 = latticePoints * 2^(1/6) * latticeScaling
-                    box::SVector{3, Float64} = [boxSide, boxSide, boxSide]
+                    boxSide::Float32 = latticePoints * 2^(1/6) * latticeScaling
+                    box::SVector{3, Float32} = [boxSide, boxSide, boxSide]
                     append!(vars, density)
                     append!(vars, densityRm)
                     append!(vars, latticeScaling)
