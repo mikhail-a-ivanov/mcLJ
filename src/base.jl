@@ -1,6 +1,7 @@
 using Printf
 using RandomNumbers
 using StaticArrays
+using Chemfiles
 
 include("distances.jl")
 
@@ -12,7 +13,7 @@ separated by scaled Rm distance,
 and the periodic box vectors in reduced units
 """
 function ljlattice(parameters)
-    lattice = [convert(SVector{3, Float32}, [i, j, k]) 
+    lattice = [convert(Vector{Float64}, [i, j, k]) 
         for i in 0:parameters.latticePoints-1 
             for j in 0:parameters.latticePoints-1 
                 for k in 0:parameters.latticePoints-1]
@@ -85,9 +86,9 @@ function mcmove!(conf, parameters, distanceMatrix, E, rng)
     E1 = particleenergy(distanceVector)
 
     # Displace the particle
-    dr = SVector{3, Float32}(parameters.Δ*(rand(rng, Float32) - 0.5), 
-                             parameters.Δ*(rand(rng, Float32) - 0.5), 
-                             parameters.Δ*(rand(rng, Float32) - 0.5))
+    dr = [parameters.Δ*(rand(rng, Float64) - 0.5), 
+          parameters.Δ*(rand(rng, Float64) - 0.5), 
+          parameters.Δ*(rand(rng, Float64) - 0.5)]
     
     conf[pointIndex] += dr
 
@@ -128,6 +129,7 @@ function mcrun(parameters)
     idString = lpad(id, 3, '0')
     energyFile = "energies-p$(idString).dat"
     trajFile = "mctraj-p$(idString).xyz"
+    pdbFile = "confout-p$(idString).pdb"
 
     # Generate LJ lattice
     conf = ljlattice(parameters)
@@ -173,7 +175,7 @@ function mcrun(parameters)
                 writeenergies(E, i, true, energyFile)
             end
 
-            if i % parameters.xyzout == 0 && parameters.outlevel == 3
+            if i % parameters.trajout == 0 && parameters.outlevel == 3
                 writexyz(conf, i, parameters, true, trajFile)
             end
             # Perform MC step adjustment during the equilibration
@@ -191,6 +193,9 @@ function mcrun(parameters)
 
     acceptanceRatio = acceptedTotal / parameters.steps
     
+    # Write the final configuration to a PDB file
+    writepdb(conf, parameters, pdbFile)
+
     return(hist, acceptanceRatio)
 end
 
@@ -205,6 +210,30 @@ function stepAdjustment!(parameters, acceptedIntermediate)
     parameters.Δ = acceptanceRatio * parameters.Δ / parameters.targetAR
     #println("New maximum displacement length = $(round((parameters.Δ * parameters.σ), digits=4)) Å")
     return(parameters)
+end
+
+"""
+function writepdb(conf, parameters, outname, atomtype="Ar")
+
+Writes a wrapped configuration into a PDB file (Depends on Chemfiles)
+"""
+function writepdb(conf, parameters, outname, atomtype="Ar")
+    # Create an empty Frame object
+    frame = Frame() 
+    # Set PBC vectors
+    box = parameters.box .* parameters.σ
+    boxCenter = box ./ 2
+    set_cell!(frame, UnitCell(box))
+    # Add wrapped atomic coordinates to the frame
+    for i in 1:parameters.N
+        wrappedAtomCoords = wrap!(UnitCell(frame), conf[i] .* parameters.σ) .+ boxCenter
+        add_atom!(frame, Atom(atomtype), wrappedAtomCoords)
+    end
+    # Write to PDB file
+    Trajectory(outname, 'w') do traj
+        write(traj, frame)
+    end
+    return
 end
 
 """
@@ -299,7 +328,7 @@ stepAdjustFreq: frequency of MC step adjustment
 targetAR: target acceptance ratio
 binWidth: histogram bin width [σ]
 Nbins: number of histogram bins
-xyzout: XYZ output frequency
+trajout: XYZ output frequency
 outfreq: output frequency
 outlevel: output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)
 
@@ -308,22 +337,22 @@ mutable struct inputParms
     latticePoints::Int
     N::Int 
     μ::Float64
-    σ::Float32
+    σ::Float64
     ϵ::Float64
     T::Float64
     β::Float64
     ρ::Float64 
     ρRm::Float64
     latticeScaling::Float64
-    box::SVector{3, Float32}
-    Δ::Float32  
+    box::Vector{Float64}
+    Δ::Float64  
     steps::Int
     Eqsteps::Int
     stepAdjustFreq::Int
     targetAR::Float64
-    binWidth::Float32
+    binWidth::Float64
     Nbins::Int
-    xyzout::Int 
+    trajout::Int 
     outfreq::Int
     outlevel::Int
 end
@@ -342,7 +371,7 @@ function readinput(inputname)
 
     # Input values for later conversion
     latticePoints::Int = 0
-    σ::Float32 = 0. # [Å]
+    σ::Float64 = 0. # [Å]
     ϵ::Float64 = 0. # [K]
     μ::Float64 = 0. # [amu]
     
@@ -384,8 +413,8 @@ function readinput(inputname)
                     ρRm = (amu*μ / (2^(1/6) * σ * 1E-10)^3)
                     latticeScaling = (ρRm / ρ)^(1/3)
                     # Generate PBC box vectors
-                    boxSide::Float32 = latticePoints * 2^(1/6) * latticeScaling
-                    box::SVector{3, Float32} = [boxSide, boxSide, boxSide]
+                    boxSide::Float64 = latticePoints * 2^(1/6) * latticeScaling
+                    box = [boxSide, boxSide, boxSide]
                     append!(vars, ρ)
                     append!(vars, ρRm)
                     append!(vars, latticeScaling)
