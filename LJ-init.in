@@ -2,19 +2,19 @@
 latticePoints  = 10        # Number of LJ lattice points
 
 # Forcefield
-atommass       = 39.792    # [amu]
-sigma          = 3.405     # [Å]
-epsilon        = 119.8     # ϵ/kB [K]
+μ              = 39.792    # [amu]
+σ              = 3.405     # [Å]
+ϵ              = 119.8     # ϵ/kB [K]
 
 # Conditions
 T              = 95.0      # [K]
-density        = 1374.0    # [kg/m3]
+ρ              = 1374.0    # [kg/m3]
 
 # Monte Carlo parameters
-delta          = 0.75       # Max displacement [Å]
-steps          = 1000000    # Total number of MC steps
-Eqsteps        = 500000     # Equilibration MC steps
-stepAdjustFreq = 50000      # Frequency of MC step adjustment
+Δ              = 0.75       # Max displacement [Å]
+steps          = 100000     # Total number of MC steps
+Eqsteps        = 50000      # Equilibration MC steps
+stepAdjustFreq = 5000       # Frequency of MC step adjustment
 targetAR       = 0.5        # Target acceptance ratio
 
 # RDF parameters
@@ -24,4 +24,4 @@ Nbins          = 600       # number of bins
 # Output control
 xyzout         = 100000    # XYZ output frequency
 outfreq        = 10000     # Output frequency
-outlevel       = 0         # Output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)
+outlevel       = 3         # Output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)

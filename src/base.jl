@@ -85,9 +85,9 @@ function mcmove!(conf, parameters, distanceMatrix, E, rng)
     E1 = particleenergy(distanceVector)
 
     # Displace the particle
-    dr = SVector{3, Float32}(parameters.delta*(rand(rng, Float32) - 0.5), 
-                             parameters.delta*(rand(rng, Float32) - 0.5), 
-                             parameters.delta*(rand(rng, Float32) - 0.5))
+    dr = SVector{3, Float32}(parameters.Δ*(rand(rng, Float32) - 0.5), 
+                             parameters.Δ*(rand(rng, Float32) - 0.5), 
+                             parameters.Δ*(rand(rng, Float32) - 0.5))
     
     conf[pointIndex] += dr
 
@@ -202,8 +202,8 @@ MC step length adjustment
 function stepAdjustment!(parameters, acceptedIntermediate)
     acceptanceRatio = acceptedIntermediate / parameters.stepAdjustFreq
     #println("Current acceptance ratio = $(round(acceptanceRatio, digits=4))")
-    parameters.delta = acceptanceRatio * parameters.delta / parameters.targetAR
-    #println("New maximum displacement length = $(round((parameters.delta * parameters.sigma), digits=4)) Å")
+    parameters.Δ = acceptanceRatio * parameters.Δ / parameters.targetAR
+    #println("New maximum displacement length = $(round((parameters.Δ * parameters.σ), digits=4)) Å")
     return(parameters)
 end
 
@@ -223,7 +223,7 @@ function writexyz(conf, currentStep, parameters, append, outname, atomtype="Ar")
     for i in 1:parameters.N
         print(io, atomtype, " ")
         for j in 1:3
-            print(io, @sprintf("%10.3f", conf[i][j]*parameters.sigma), " ")
+            print(io, @sprintf("%10.3f", conf[i][j]*parameters.σ), " ")
             if j == 3
                 print(io, "\n")
             end
@@ -264,7 +264,7 @@ function writeRDF(outname, hist, parameters)
     RDF = hist[2:end] .* rdfNorm
 
     # Convert bins to Å
-    bins .*= parameters.sigma
+    bins .*= parameters.σ
 
     # Write the data
     io = open(outname, "w")
@@ -283,16 +283,16 @@ mutable struct inputParms
 Fields:
 latticePoints: number of LJ lattice points
 N: number of particles
-atommass: atom mass [amu]
-sigma: sigma LJ parameter [Å]
-epsilon: epsilon LJ parameter, ϵ/kB [K]
+μ: atom mass [amu]
+σ: σ LJ parameter [Å]
+ϵ: ϵ LJ parameter, ϵ/kB [K]
 T: temperature [K]
 β: ϵ/(kB*T), reciprocal reduced temperature
-density: target density [kg/m3]
-densityRm: initial density [kg/m3]
+ρ: target ρ [kg/m3]
+ρRm: initial ρ [kg/m3]
 latticeScaling: lattice scaling factor
 box: box vector, σ
-delta: max displacement [σ]
+Δ: max displacement [σ]
 steps: total number of steps
 Eqsteps: equilibration steps
 stepAdjustFreq: frequency of MC step adjustment
@@ -306,17 +306,17 @@ outlevel: output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)
 """
 mutable struct inputParms
     latticePoints::Int
-    N::Int
-    atommass::Float64
-    sigma::Float32
-    epsilon::Float64
+    N::Int 
+    μ::Float64
+    σ::Float32
+    ϵ::Float64
     T::Float64
     β::Float64
-    density::Float64
-    densityRm::Float64
+    ρ::Float64 
+    ρRm::Float64
     latticeScaling::Float64
     box::SVector{3, Float32}
-    delta::Float32  
+    Δ::Float32  
     steps::Int
     Eqsteps::Int
     stepAdjustFreq::Int
@@ -344,7 +344,7 @@ function readinput(inputname)
     latticePoints::Int = 0
     σ::Float32 = 0. # [Å]
     ϵ::Float64 = 0. # [K]
-    atommass::Float64 = 0. # [amu]
+    μ::Float64 = 0. # [amu]
     
     # Read the input file
     file = open(inputname, "r")
@@ -364,13 +364,13 @@ function readinput(inputname)
                     N = Int(latticePoints^3)
                     append!(vars, latticePoints)
                     append!(vars, N)
-                elseif field == "atommass"
-                    atommass = parse(fieldtype, line[3])
-                    append!(vars, atommass)
-                elseif field == "sigma"
+                elseif field == "μ"
+                    μ = parse(fieldtype, line[3])
+                    append!(vars, μ)
+                elseif field == "σ"
                     σ = parse(fieldtype, line[3])
                     append!(vars, σ)
-                elseif field == "epsilon"
+                elseif field == "ϵ"
                     ϵ = parse(fieldtype, line[3])
                     ϵ *= kB
                     append!(vars, ϵ)
@@ -379,18 +379,18 @@ function readinput(inputname)
                     β = ϵ/(T*kB)
                     append!(vars, T)  
                     append!(vars, β)
-                elseif field == "density"
-                    density = parse(fieldtype, line[3])
-                    densityRm = (amu*atommass / (2^(1/6) * σ * 1E-10)^3)
-                    latticeScaling = (densityRm / density)^(1/3)
+                elseif field == "ρ"
+                    ρ = parse(fieldtype, line[3])
+                    ρRm = (amu*μ / (2^(1/6) * σ * 1E-10)^3)
+                    latticeScaling = (ρRm / ρ)^(1/3)
                     # Generate PBC box vectors
                     boxSide::Float32 = latticePoints * 2^(1/6) * latticeScaling
                     box::SVector{3, Float32} = [boxSide, boxSide, boxSide]
-                    append!(vars, density)
-                    append!(vars, densityRm)
+                    append!(vars, ρ)
+                    append!(vars, ρRm)
                     append!(vars, latticeScaling)
                     append!(vars, [box])
-                elseif field == "delta"
+                elseif field == "Δ"
                     Δ = parse(fieldtype, line[3])
                     append!(vars, Δ/σ)
                 elseif field == "binWidth"
