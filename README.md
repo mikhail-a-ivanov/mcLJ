@@ -16,11 +16,13 @@ Moreover, the program runs in parallel by launching separate Monte Carlo simulat
 
 Core packages:
 - `Distributed`
-- `StaticArrays`
 - `RandomNumbers`
 - `LinearAlgebra`
+- `Chemfiles`
 
 Other packages:
 - `Dates`
 - `Printf`
 - `Statistics`
+
+

@@ -2,6 +2,7 @@
 latticePoints  = 10        # Number of LJ lattice points
 
 # Forcefield
+atomname       = Ar        # Atom chemical symbol
 μ              = 39.792    # [amu]
 σ              = 3.405     # [Å]
 ϵ              = 119.8     # ϵ/kB [K]

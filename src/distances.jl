@@ -1,5 +1,3 @@
-using StaticArrays
-
 """
 pbcdx(x1, x2, xsize)
 

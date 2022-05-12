@@ -20,6 +20,7 @@ function main()
     parameters = readinput(inputname)
 
     println("Running MC simulation on $(np) rank(s)...\n")
+    println("The simulated system contains $(parameters.N) $(parameters.atomname) atoms")
     println("Total number of steps: $(parameters.steps * np / 1E6)M")
     println("Number of equilibration steps per rank: $(parameters.Eqsteps / 1E6)M")
     println("Trajectory output every $(parameters.trajout / 1E6)M steps")

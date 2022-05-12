@@ -1,6 +1,5 @@
 using Printf
 using RandomNumbers
-using StaticArrays
 using Chemfiles
 
 include("distances.jl")
@@ -211,11 +210,11 @@ function stepAdjustment!(parameters, acceptedIntermediate)
 end
 
 """
-function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
+function writetraj(conf, parameters, outname, mode='w')
 
 Writes a wrapped configuration into a trajectory file (Depends on Chemfiles)
 """
-function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
+function writetraj(conf, parameters, outname, mode='w')
     # Create an empty Frame object
     frame = Frame() 
     # Set PBC vectors
@@ -225,7 +224,7 @@ function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
     # Add wrapped atomic coordinates to the frame
     for i in 1:parameters.N
         wrappedAtomCoords = wrap!(UnitCell(frame), conf[i] .* parameters.σ) .+ boxCenter
-        add_atom!(frame, Atom(atomtype), wrappedAtomCoords)
+        add_atom!(frame, Atom(parameters.atomname), wrappedAtomCoords)
     end
     # Write to file
     Trajectory(outname, mode) do traj
@@ -235,16 +234,16 @@ function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
 end
 
 """
-function writexyz(conf, currentStep, parameters, outname, mode="w", atomtype="Ar")
+function writexyz(conf, currentStep, parameters, outname, mode="w")
 
 Writes a configuration to an XYZ file (legacy function)
 """
-function writexyz(conf, currentStep, parameters, outname, mode="w", atomtype="Ar")
+function writexyz(conf, currentStep, parameters, outname, mode="w")
     io = open(outname, mode)
     print(io, parameters.N, "\n")
     print(io, "Step = ", @sprintf("%d", currentStep), "\n")
     for i in 1:parameters.N
-        print(io, atomtype, " ")
+        print(io, parameters.atomname, " ")
         for j in 1:3
             print(io, @sprintf("%10.3f", conf[i][j]*parameters.σ), " ")
             if j == 3
@@ -287,8 +286,8 @@ function writeRDF(outname, hist, parameters)
 
     # Write the data
     io = open(outname, "w")
-    print(io, "# RDF data \n")
-    print(io, "# r, Å; g(r); Histogram \n")
+    print(io, "# RDF data ($(parameters.atomname) - $(parameters.atomname)) \n")
+    print(io, "# r, Å; g(r); Distance histogram \n")
     for i in 1:length(hist)
         print(io, @sprintf("%6.3f %12.3f %12.3f", bins[i], RDF[i], hist[i]), "\n")
     end
@@ -301,6 +300,7 @@ mutable struct inputParms
 Fields:
 latticePoints: number of LJ lattice points
 N: number of particles
+atomname: atom chemical symbol 
 μ: atom mass [amu]
 σ: σ LJ parameter [Å]
 ϵ: ϵ LJ parameter, ϵ/kB [K]
@@ -322,7 +322,8 @@ outfreq: output frequency
 """
 mutable struct inputParms
     latticePoints::Int
-    N::Int 
+    N::Int
+    atomname::String 
     μ::Float64
     σ::Float64
     ϵ::Float64
