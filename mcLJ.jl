@@ -22,6 +22,7 @@ function main()
     println("Running MC simulation on $(np) rank(s)...\n")
     println("Total number of steps: $(parameters.steps * np / 1E6)M")
     println("Number of equilibration steps per rank: $(parameters.Eqsteps / 1E6)M")
+    println("Trajectory output every $(parameters.trajout / 1E6)M steps")
     println("Box vectors: ", [round(boxSide*parameters.σ, digits=3) for boxSide in parameters.box], " Å")
     println("Density: $(parameters.ρ) kg/m3")
     println("Temperature: $(parameters.T) K")
@@ -31,12 +32,10 @@ function main()
     inputs = [parameters for worker in workers()]
     outputs = pmap(mcrun, inputs)
 
-    # Write the final RDF
-    if parameters.outlevel >= 1
-        meanHist = mean([output[1] for output in outputs])
-        rdfName = "rdf-mean-p$(np).dat"
-        writeRDF(rdfName, meanHist, parameters)
-    end
+    # Write the final RDF        
+    meanHist = mean([output[1] for output in outputs])
+    rdfName = "rdf-mean-p$(np).dat"
+    writeRDF(rdfName, meanHist, parameters)
     
     # Report the mean acceptance ratio
     meanAcceptanceRatio = mean([output[2] for output in outputs])

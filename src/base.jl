@@ -128,7 +128,7 @@ function mcrun(parameters)
     end
     idString = lpad(id, 3, '0')
     energyFile = "energies-p$(idString).dat"
-    trajFile = "mctraj-p$(idString).xyz"
+    trajFile = "mctraj-p$(idString).xtc"
     pdbFile = "confout-p$(idString).pdb"
 
     # Generate LJ lattice
@@ -147,14 +147,10 @@ function mcrun(parameters)
     E = totalenergy(distanceMatrix, parameters)
 
     # Save initial configuration and energy
-    if parameters.outlevel >= 2
-        writeenergies(E, 0, false, energyFile)
-    end
+    writeenergies(E, 0, energyFile, "w")
 
     # Start writing MC trajectory
-    if parameters.outlevel == 3
-        writexyz(conf, 0, parameters, false, trajFile)
-    end
+    writetraj(conf, parameters, trajFile, 'w')
 
     # Acceptance counters
     acceptedTotal = 0
@@ -166,35 +162,37 @@ function mcrun(parameters)
         acceptedTotal += accepted
         acceptedIntermediate += accepted
 
-            # MC output
-            if i % parameters.outfreq == 0 && i > parameters.Eqsteps && parameters.outlevel >= 1
-                hist = hist!(distanceMatrix, hist, parameters)
-            end
+        # Perform MC step adjustment during the equilibration
+        if parameters.stepAdjustFreq > 0 && i % parameters.stepAdjustFreq == 0 && i < parameters.Eqsteps
+            stepAdjustment!(parameters, acceptedIntermediate)
+            acceptedIntermediate = 0
+        end
 
-            if i % parameters.outfreq == 0 && parameters.outlevel >= 2
-                writeenergies(E, i, true, energyFile)
-            end
+        # Energy output
+        if i % parameters.outfreq == 0
+            writeenergies(E, i, energyFile, "a")
+        end
 
-            if i % parameters.trajout == 0 && parameters.outlevel == 3
-                writexyz(conf, i, parameters, true, trajFile)
-            end
-            # Perform MC step adjustment during the equilibration
-            if parameters.stepAdjustFreq > 0 && i % parameters.stepAdjustFreq == 0 && i < parameters.Eqsteps
-                stepAdjustment!(parameters, acceptedIntermediate)
-                acceptedIntermediate = 0
-            end
+        # MC trajectory output
+        if i % parameters.trajout == 0
+            writetraj(conf, parameters, trajFile, 'a')
+        end
+
+        # Distance histogram calculation
+        if i % parameters.outfreq == 0 && i > parameters.Eqsteps
+            hist = hist!(distanceMatrix, hist, parameters)
+        end
     end
 
-    if parameters.outlevel >= 1
-        # Normalize the histogram to the number of frames
-        Nframes = (parameters.steps - parameters.Eqsteps) / parameters.outfreq
-        hist /= Nframes
-    end
+    # Normalize the histogram to the number of frames
+    Nframes = (parameters.steps - parameters.Eqsteps) / parameters.outfreq
+    hist /= Nframes
 
+    # Compute the final acceptance ratio
     acceptanceRatio = acceptedTotal / parameters.steps
     
     # Write the final configuration to a PDB file
-    writepdb(conf, parameters, pdbFile)
+    writetraj(conf, parameters, pdbFile, 'w')
 
     return(hist, acceptanceRatio)
 end
@@ -213,11 +211,11 @@ function stepAdjustment!(parameters, acceptedIntermediate)
 end
 
 """
-function writepdb(conf, parameters, outname, atomtype="Ar")
+function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
 
-Writes a wrapped configuration into a PDB file (Depends on Chemfiles)
+Writes a wrapped configuration into a trajectory file (Depends on Chemfiles)
 """
-function writepdb(conf, parameters, outname, atomtype="Ar")
+function writetraj(conf, parameters, outname, mode='w', atomtype="Ar")
     # Create an empty Frame object
     frame = Frame() 
     # Set PBC vectors
@@ -229,24 +227,20 @@ function writepdb(conf, parameters, outname, atomtype="Ar")
         wrappedAtomCoords = wrap!(UnitCell(frame), conf[i] .* parameters.σ) .+ boxCenter
         add_atom!(frame, Atom(atomtype), wrappedAtomCoords)
     end
-    # Write to PDB file
-    Trajectory(outname, 'w') do traj
+    # Write to file
+    Trajectory(outname, mode) do traj
         write(traj, frame)
     end
     return
 end
 
 """
-writexyz(conf, currentStep, parameters, append, outname, atomtype="Ar")
+function writexyz(conf, currentStep, parameters, outname, mode="w", atomtype="Ar")
 
-Writes a configuration to an XYZ file
+Writes a configuration to an XYZ file (legacy function)
 """
-function writexyz(conf, currentStep, parameters, append, outname, atomtype="Ar")
-    if append
-        io = open(outname, "a")
-    else
-        io = open(outname, "w")
-    end
+function writexyz(conf, currentStep, parameters, outname, mode="w", atomtype="Ar")
+    io = open(outname, mode)
     print(io, parameters.N, "\n")
     print(io, "Step = ", @sprintf("%d", currentStep), "\n")
     for i in 1:parameters.N
@@ -262,16 +256,12 @@ function writexyz(conf, currentStep, parameters, append, outname, atomtype="Ar")
 end
 
 """
-writeenergies(energy, currentStep, append, outname)
+function writeenergies(energy, currentStep, outname, mode="w")
 
 Writes the total energy to an output file
 """
-function writeenergies(energy, currentStep, append, outname)
-    if append
-        io = open(outname, "a")
-    else
-        io = open(outname, "w")
-    end
+function writeenergies(energy, currentStep, outname, mode="w")
+    io = open(outname, mode)
     print(io, "# Total energy in reduced units \n")
     print(io, "# Step = ", @sprintf("%d", currentStep), "\n")
     print(io, @sprintf("%10.3f", energy), "\n")
@@ -289,8 +279,8 @@ function writeRDF(outname, hist, parameters)
     V = (parameters.box[1])^3
     Npairs::Int = parameters.N*(parameters.N-1)/2
     bins = [bin*parameters.binWidth for bin in 1:parameters.Nbins]
-    rdfNorm = [(V/Npairs) * 1/(4*π*parameters.binWidth*bins[i]^2) for i in 2:length(bins)]
-    RDF = hist[2:end] .* rdfNorm
+    rdfNorm = [(V/Npairs) * 1/(4*π*parameters.binWidth*bins[i]^2) for i in 1:length(bins)]
+    RDF = hist .* rdfNorm
 
     # Convert bins to Å
     bins .*= parameters.σ
@@ -299,9 +289,8 @@ function writeRDF(outname, hist, parameters)
     io = open(outname, "w")
     print(io, "# RDF data \n")
     print(io, "# r, Å; g(r); Histogram \n")
-    print(io, @sprintf("%6.3f %12.3f %12.3f", 0, 0, hist[1]), "\n")
-    for i in 2:length(hist)
-        print(io, @sprintf("%6.3f %12.3f %12.3f", bins[i], RDF[i-1], hist[i]), "\n")
+    for i in 1:length(hist)
+        print(io, @sprintf("%6.3f %12.3f %12.3f", bins[i], RDF[i], hist[i]), "\n")
     end
     close(io)
 end
@@ -330,8 +319,6 @@ binWidth: histogram bin width [σ]
 Nbins: number of histogram bins
 trajout: XYZ output frequency
 outfreq: output frequency
-outlevel: output level (0: no output, 1: +RDF, 2: +energies, 3: +trajectories)
-
 """
 mutable struct inputParms
     latticePoints::Int
@@ -354,7 +341,6 @@ mutable struct inputParms
     Nbins::Int
     trajout::Int 
     outfreq::Int
-    outlevel::Int
 end
 
 """
